@@ -389,13 +389,13 @@ PLAYER_SPRITES.BL={
   deal1:   P(['bl/bl-deal1.png'],7,false),    // dealer throws the 1st card to this seat
   deal2:   P(['bl/bl-deal2.png'],7,false),    // dealer throws the 2nd card; when it finishes the seat rests in idle
   idle:    P(['bl/bl-idle.png'],7,true),      // BASE POSE: sitting, holding 2 cards
-  peek:    P(['bl/bl-peek.png'],7,false),     // checks own cards: random while idle + when their turn starts
-  call:    P(['bl/bl-call1.png','bl/bl-call2.png'],7,false),    // throws chips in (CALL, also used for a plain bet)
-  bet:     P(['bl/bl-bet1.png','bl/bl-bet2.png'],7,false),    // optional separate BET look (falls back to call)
-  raise:   P(['bl/bl-raise1.png','bl/bl-raise2.png'],7,false),    // puts chips in a different way (falls back to bet, call)
+  peek:    P(['bl/bl-peek.png','bl/bl-peek.png','bl/bl-peek.png','bl/bl-peek.png','bl/bl-peek.png'],7,false),     // checks own cards: random while idle + when their turn starts
+  call:    P(['bl/bl-call1.png','bl/bl-call1.png','bl/bl-call1.png','bl/bl-call1.png','bl/bl-call2.png'],7,false),    // throws chips in (CALL, also used for a plain bet)
+  bet:     P([,'bl/bl-bet1.png','bl/bl-bet1.png','bl/bl-bet1.png','bl/bl-bet1.png','bl/bl-bet2.png'],7,false),    // optional separate BET look (falls back to call)
+  raise:   P([,'bl/bl-raise1.png','bl/bl-raise1.png','bl/bl-raise1.png','bl/bl-raise1.png','bl/bl-raise2.png','bl/bl-raise2.png','bl/bl-raise2.png'],7,false),    // puts chips in a different way (falls back to bet, call)
   check:   P(['bl/bl-check1.png','bl/bl-check2.png','bl/bl-check1.png','bl/bl-check2.png','bl/bl-check1.png'],7,false),    // taps the table
-  fold:    P(['bl/bl-fold1','bl/bl-fold2'],7,false),    // returns / pushes cards back
-  showdown:P(['bl/bl-show1','bl/bl-show2'],7,false),    // throws cards onto the table at showdown
+  fold:    P(['bl/bl-fold1.png','bl/bl-fold1.png','bl/bl-fold2.png'],7,false),    // returns / pushes cards back
+  showdown:P(['bl/bl-show1.png','bl/bl-show1.png','bl/bl-show2.png','bl/bl-show2.png','bl/bl-show2.png','bl/bl-show2.png','bl/bl-show2.png'],7,false),    // throws cards onto the table at showdown
 };
 
 // ---- slot BR : BOTTOM-RIGHT ----
