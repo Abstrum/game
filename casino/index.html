@@ -385,17 +385,17 @@ PLAYER_SPRITES.TR={
 // ---- slot BL : BOTTOM-LEFT ----
 PLAYER_SPRITES.BL={
   box:{x:30,y:-30},   // frame's bottom-left corner on the seat (arms enter from the left/bottom edges)
-  empty:   P(['bl-empty.png'],7,true),      // no cards in hand: before the deal / after folding / after showing
-  deal1:   P(['bl-deal1.png'],7,false),    // dealer throws the 1st card to this seat
-  deal2:   P(['bl-deal2.png'],7,false),    // dealer throws the 2nd card; when it finishes the seat rests in idle
-  idle:    P(['bl-idle.png'],7,true),      // BASE POSE: sitting, holding 2 cards
-  peek:    P(['bl-peek.png'],7,false),     // checks own cards: random while idle + when their turn starts
-  call:    P(['bl-call1.png','bl-call2.png'],7,false),    // throws chips in (CALL, also used for a plain bet)
-  bet:     P(['bl-bet1.png','bl-bet2.png'],7,false),    // optional separate BET look (falls back to call)
-  raise:   P(['bl-raise1.png','bl-raise2.png'],7,false),    // puts chips in a different way (falls back to bet, call)
-  check:   P(['bl-check1.png','bl-check2.png','bl-check1.png','bl-check2.png','bl-check1.png'],7,false),    // taps the table
-  fold:    P(['bl-fold1','bl-fold2'],7,false),    // returns / pushes cards back
-  showdown:P(['bl-show1','bl-show2'],7,false),    // throws cards onto the table at showdown
+  empty:   P(['bl/bl-empty.png'],7,true),      // no cards in hand: before the deal / after folding / after showing
+  deal1:   P(['bl/bl-deal1.png'],7,false),    // dealer throws the 1st card to this seat
+  deal2:   P(['bl/bl-deal2.png'],7,false),    // dealer throws the 2nd card; when it finishes the seat rests in idle
+  idle:    P(['bl/bl-idle.png'],7,true),      // BASE POSE: sitting, holding 2 cards
+  peek:    P(['bl/bl-peek.png'],7,false),     // checks own cards: random while idle + when their turn starts
+  call:    P(['bl/bl-call1.png','bl/bl-call2.png'],7,false),    // throws chips in (CALL, also used for a plain bet)
+  bet:     P(['bl/bl-bet1.png','bl/bl-bet2.png'],7,false),    // optional separate BET look (falls back to call)
+  raise:   P(['bl/bl-raise1.png','bl/bl-raise2.png'],7,false),    // puts chips in a different way (falls back to bet, call)
+  check:   P(['bl/bl-check1.png','bl/bl-check2.png','bl/bl-check1.png','bl/bl-check2.png','bl/bl-check1.png'],7,false),    // taps the table
+  fold:    P(['bl/bl-fold1','bl/bl-fold2'],7,false),    // returns / pushes cards back
+  showdown:P(['bl/bl-show1','bl/bl-show2'],7,false),    // throws cards onto the table at showdown
 };
 
 // ---- slot BR : BOTTOM-RIGHT ----
