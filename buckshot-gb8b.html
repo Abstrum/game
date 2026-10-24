@@ -1,0 +1,105 @@
+<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1,user-scalable=no">
+<title>BUCKSHOT 8B</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel=stylesheet>
+<style>
+body{margin:0;background:#000;color:#ffd9a0;font:10px 'Press Start 2P',monospace;text-align:center;line-height:1.8}
+#L{max-width:420px;margin:auto;padding:16px}
+.card{border:3px solid #ff8a30;box-shadow:inset 0 0 0 3px #0a0a14,0 0 0 3px #1d2c52;margin:18px 0;padding:14px}
+button{font:inherit;background:#ff8a30;color:#000;border:0;padding:8px 10px;margin:4px;cursor:pointer}
+button:disabled{background:#333;color:#777}
+canvas{display:none;width:min(100vw,150vh);margin:auto;image-rendering:pixelated}
+</style>
+<div id=L></div><canvas id=c></canvas>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+const $=id=>document.getElementById(id),rnd=n=>Math.random()*n|0,ID=(m,n)=>`gb8b-bsr-${m}-${n}`;
+const cv=$('c'),Z=cv.getContext('2d');cv.width=192;cv.height=128;
+let X=Z,G,S,H=[],P=[],CN,A=null,EV,T0=0,lastEv=0,T=0,F={},AC;
+const R=(x,y,w,h,c)=>{X.fillStyle=c;X.fillRect(x|0,y|0,w,h)};
+const mk=f=>{const c=document.createElement('canvas');c.width=192;c.height=128;const o=X;X=c.getContext('2d');f();X=o;return c};
+const TX=(s,x,y,c,z=8)=>{X.font=`${z}px "Press Start 2P",monospace`;X.textBaseline='top';X.fillStyle='#000';X.fillText(s,x+1,y+1);X.fillStyle=c;X.fillText(s,x,y)};
+const mid=(s,y,c,z=8)=>TX(s,96-s.length*z/2|0,y,c,z);
+const snd=lv=>{try{AC=AC||new AudioContext();const t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain();o.type=lv?'sawtooth':'square';o.frequency.setValueAtTime(lv?110:700,t);o.frequency.exponentialRampToValueAtTime(30,t+.3);g.gain.setValueAtTime(.2,t);g.gain.exponentialRampToValueAtTime(.001,t+(lv?.4:.08));o.connect(g).connect(AC.destination);o.start();o.stop(t+.4)}catch(e){}};
+
+/* ---------- GB8B look: black void, orange key rim, blue ambient, checker dither, 3-5 tone cel shading ---------- */
+const BG=mk(()=>{R(0,0,192,128,'#05060d');for(let y=0;y<40;y++)for(let x=0;x<192;x++)if((x+y)%2==0&&(x*5+y*11)%13<(40-y)/4)R(x,y,1,1,'#0f1c3c')});
+const TB=mk(()=>{for(let y=58;y<128;y++){const t=(y-58)/70,a=34-80*t|0,b=158+80*t|0;
+ for(let x=Math.max(a,0);x<Math.min(b,192);x++){const d=((x-96)/62)**2+((y-84)/24)**2,c=(x+y)&1;
+  R(x,y,1,1,y<60?'#ff9a40':(x<a+2||x>b-3)?'#14091a':d<.2?'#a44f2c':d<.45?(c?'#a44f2c':'#7a3a2c'):d<.75?(c?'#7a3a2c':'#4a2230'):d<1?(c?'#4a2230':'#2c1426'):'#2c1426')}}});
+const PAL=[['#3b5a8a','#1d2c52'],['#7a3b6a','#3a1a3a'],['#3a7a5a','#1a3a34'],['#8a6a2a','#44301a']];
+const blk=(x,y,w,h,p,ls)=>{for(let j=0;j<h;j++)for(let i=0;i<w;i++){const t=(i/(w-1)*2-1)*ls-j/h*.3;
+ R(x+i,y+j,1,1,(i==0||i==w-1||j==0)?'#0c0814':t>.55?'#ff8a30':t>.1?p[0]:t>-.3?((i+j)&1?p[0]:p[1]):p[1])}};
+const EM=[...Array(14)].map(()=>[rnd(192),rnd(128),rnd(9)]);
+const pp=q=>q?(G.S.N==2?[96,26]:[[22,44],[96,26],[170,44]][q-1]):[96,112];
+const fig=(x,y,k,s,sh)=>{const d=s&&!s.al,p=d?['#2a2a34','#16161e']:PAL[k],ls=x>96?-1:1;y+=d?8:T>>3&1;x+=sh;
+ R(x-12,y-4,24,46,'#120c1c');R(x-11,y-3,22,44,'#1c1430');if(!s)return;
+ blk(x-9,y+10,18,34,p,ls);blk(x-5,y,10,11,['#3a2a48','#1a1228'],ls);
+ const g=d?'#f33':T%23<2?'#345':'#5ff';R(x-3,y+4,2,1,g);R(x+1,y+4,2,1,g)};
+const pw=k=>30+(k==G.me?24:16);
+const pan=(x,y,k)=>{const D=G.S,s=D.seats[k],n=k==G.me?'YOU':'P'+(k+1),on=D.st&&D.win<0&&D.turn==k&&T%4<3;
+ R(x,y,pw(k),12,on?'#ff8a30':'#2a3a6a');R(x+1,y+1,pw(k)-2,10,'#0a0a14');
+ if(!s||!s.al)return TX(s?'DEAD':'EMPTY',x+3,y+2,'#667');
+ TX(n,x+3,y+2,k==G.me?'#5ff':'#ffd9a0');
+ for(let i=0;i<D.mx;i++){const o=x+6+n.length*8+i*6,f=i<s.hp;R(o,y+4,4,4,f?'#ff4a3a':'#2a1a2a');f&&R(o,y+4,2,1,'#ffb0a0')}};
+const gun=(bx,by,tx,ty,w)=>{const L=Math.hypot(tx-bx,ty-by)|0;for(let k=0;k<=L;k++){const f=k/L,s=Math.max(2,w*(1-f*.5))|0,x=bx+(tx-bx)*f-s/2,y=by+(ty-by)*f-s/2,wd=f<.35;
+ R(x,y,s,s,wd?'#7a4326':'#56627e');R(x,y,s,1,wd?'#b06a3a':'#ff8a30')}};
+const aim=a=>{const q=a==null?-1:(a-G.me+G.S.N)%G.S.N;
+ if(!q){R(80,106,32,22,'#56627e');R(78,108,36,18,'#56627e');R(80,106,32,2,'#ff8a30');R(83,111,26,12,'#05060d');R(81,113,30,8,'#05060d');return[96,117]}
+ const[tx,ty]=q>0?pp(q):[96,62],x=150+(tx-150)*.65,y=134+(ty+(q>0?6:0)-134)*.65;gun(150,134,x,y,6);return[x,y]};
+
+setInterval(()=>{if(!G)return;T++;const D=G.S,me=G.me,N=D.N,e=performance.now()-T0,k2=q=>(q+me)%N;
+ Z.drawImage(BG,0,0);
+ EM.forEach(p=>{p[1]-=.5;p[0]+=Math.sin(T/5+p[2])*.4;if(p[1]<0)p[1]=128;R(p[0],p[1],1,1,p[2]%2?'#ff8a30':'#3a6aff')});
+ for(let q=1;q<N;q++){const k=k2(q),[x,y]=pp(q);fig(x,y,k,D.seats[k],EV&&e<500&&EV.lv&&EV.at==k&&T%2?3:0)}
+ Z.drawImage(TB,0,0);
+ for(let q=0;q<N;q++){const k=k2(q),w=pw(k);pan(...(q?(N==2||q==2?[96-w/2|0,62]:q==1?[3,88]:[189-w,88]):[3,114]),k)}
+ const mt=D.st&&D.win<0&&D.turn==me,a=EV&&EV.by==me&&e<1000?EV.at:A;let tip;
+ if(mt||a!=null)tip=aim(a);else gun(70,106,122,98,4);
+ if(EV&&e<1000&&EV.by!=me){const q=(EV.by-me+N)%N,[x,y]=pp(q),qa=(EV.at-me+N)%N,[tx,ty]=EV.at==EV.by?[x-3,y+8]:qa?(([u,v])=>[u,v+8])(pp(qa)):[96,118];gun(x+8,y+30,tx,ty,3);tip=[tx,ty]}
+ if(tip&&EV&&EV.lv&&e<200){R(tip[0]-3,tip[1]-3,6,6,'#fff');R(tip[0]-2,tip[1]-2,4,4,'#ff8a30')}
+ const n=D.seats.filter(x=>x).length;
+ D.st&&mid(`SHELLS LIVE ${D.ld} BLANK ${D.bl}`,2,'#ffd9a0');
+ mid(!D.st?`WAITING ${n}/${N}`:D.win>=0?(D.win==me?'YOU WIN':`P${D.win+1} WINS`):mt?(A==null?'PICK A TARGET':'TAP AGAIN TO FIRE'):`P${D.turn+1} TURN`,12,'#ff8a30');
+ D.win>=0&&mid('TAP TO EXIT',100,'#5ff');
+ if(EV&&EV.lv&&e<120){Z.globalAlpha=.6;R(0,0,192,128,'#fff');Z.globalAlpha=1}
+ if(EV&&EV.lv&&EV.at==me&&e<600)[[0,0,192,4],[0,124,192,4],[0,0,4,128],[188,0,4,128]].forEach(r=>R(...r,'#f22'));
+ if(EV&&e<1000)mid(EV.lv?'BANG!':'CLICK',50,EV.lv?'#ff4a3a':'#9ab',16)},100);
+
+/* ---------- input: tap a player to aim, tap again to fire (tap yourself to shoot yourself) ---------- */
+cv.onclick=ev=>{if(!G)return;const D=G.S,me=G.me,r=cv.getBoundingClientRect(),x=(ev.clientX-r.left)/r.width*192,y=(ev.clientY-r.top)/r.height*128;
+ if(D.win>=0)return location.reload();if(!D.st||D.turn!=me)return;
+ for(let q=0;q<D.N;q++){const[px,py]=pp(q),k=(q+me)%D.N;
+  if(D.seats[k].al&&(q?Math.abs(x-px)<20&&y>py-4&&y<py+36:x>40&&x<150&&y>96)){A==k?(S?act(0,k):CN.send({at:k}),A=null):A=k;return}}};
+
+/* ---------- host-authoritative game logic ---------- */
+const load=()=>{const n=2+rnd(7),l=1+rnd(n-1);H=[...Array(n)].map((_,i)=>i<l).sort(()=>Math.random()-.5);S.ld=l;S.bl=n-l};
+const nxt=()=>{do S.turn=(S.turn+1)%S.N;while(!S.seats[S.turn].al)};
+const chk=()=>{const a=S.seats.filter(x=>x.al);if(a.length<2)S.win=S.seats.findIndex(x=>x.al)};
+const act=(k,t)=>{const s=S.seats;if(!S.st||S.win>=0||S.turn!=k||!s[t]?.al)return;
+ const lv=H.pop();if(lv&&!--s[t].hp)s[t].al=0;
+ S.ev={id:(S.ev?.id|0)+1,by:k,at:t,lv};chk();
+ if(S.win<0){(t!=k||lv)&&nxt();H.length||load()}bc()};
+const gone=k=>{if(!S.st){S.seats[k]=null;P[k]=null}else{S.seats[k]={hp:0,al:0};chk();S.win<0&&S.turn==k&&nxt()}bc()};
+const trig=()=>{const e=G.S.ev;if(e&&e.id!=lastEv){lastEv=e.id;EV=e;T0=performance.now();A=null;snd(e.lv)}};
+const bc=()=>{P.forEach((c,i)=>c&&c.open&&c.send({S,me:i}));G={S,me:0};trig()};
+const show=()=>{$('L').hidden=1;cv.style.display='block'};
+
+function host(m){let n=1;const go=()=>{const p=new Peer(ID(m,n));
+ p.on('error',e=>{if(e.type=='unavailable-id'&&n++<8)go()});
+ p.on('open',()=>{S={N:m,mx:0,seats:Array(m).fill(null),turn:0,st:0,ld:0,bl:0,ev:null,win:-1};S.seats[0]={hp:0,al:1};show();bc();
+  p.on('connection',c=>c.on('open',()=>{const cnt=S.seats.filter(x=>x).length,k=S.seats.indexOf(null);
+   if(!c.metadata?.join)return c.send({m,n,c:cnt,st:S.st});
+   if(k<0||S.st)return c.send({full:1});
+   S.seats[k]={hp:0,al:1};P[k]=c;c.on('data',d=>act(k,d.at));c.on('close',()=>gone(k));
+   if(S.seats.every(x=>x)){S.st=1;S.mx=2+rnd(3);S.seats.forEach(s=>s.hp=S.mx);load()}bc()}))})};go()}
+function join(id){const c=lp.connect(id,{metadata:{join:1}});
+ c.on('data',d=>{if(d.full)return alert('TABLE FULL');G=d;CN=c;trig();show()});
+ c.on('close',()=>{alert('TABLE CLOSED');location.reload()})}
+
+/* ---------- lobby: tables are peers with fixed ids; scanning = probing the ids to count live ones ---------- */
+function lobby(){const h='<h2>BUCKSHOT<br><br>ROULETTE</h2>'+[2,4].map(m=>{const t=Object.values(F).filter(x=>x.m==m);
+ return`<div class=card>${m==2?'1 V 1':'4 PLAYERS'}<p>LIVE TABLES: ${t.length}</p>${t.map(x=>`<p>TABLE ${x.n} &nbsp;${x.c}/${m} <button ${x.st||x.c>=m?'disabled':''} onclick="join('${x.id}')">JOIN</button></p>`).join('')}<button onclick="host(${m})">CREATE TABLE</button></div>`}).join('');
+ if(h!=$('L').dataset.h)$('L').innerHTML=$('L').dataset.h=h}
+function scan(){if(G)return;const N={};[2,4].forEach(m=>{for(let n=1;n<9;n++){const id=ID(m,n),c=lp.connect(id);c.on('data',d=>{N[id]={...d,id};c.close()})}});setTimeout(()=>{F=N;lobby()},1500)}
+const lp=new Peer();lp.on('error',()=>{});lp.on('open',()=>{scan();setInterval(scan,4000)});lobby();
+</script>
