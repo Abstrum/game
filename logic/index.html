@@ -70,7 +70,23 @@ input:focus,button:focus-visible{outline:2px solid var(--amber);outline-offset:1
 .msg{margin:2px 0;word-break:break-word}.msg b{color:var(--amber)}.msg.sys{color:var(--mut);font-size:13px}
 #ov{position:fixed;inset:0;background:rgba(14,16,34,.92);display:grid;place-items:center;text-align:center;padding:30px;z-index:9;color:var(--tx)}
 #toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--card2);border:1px solid var(--amber);padding:10px 16px;border-radius:12px;z-index:10;max-width:90%}
-@media (prefers-reduced-motion:reduce){.shake{animation:none}}
+button{transition:transform .15s ease,filter .2s ease}
+button:hover:not(:disabled){filter:brightness(1.12)}
+.qbox.enter{animation:up .45s cubic-bezier(.2,.7,.2,1)}
+@keyframes up{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(.6)}60%{transform:scale(1.12)}100%{transform:scale(1)}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.av{transition:transform .25s ease,opacity .3s ease,border-color .3s ease}
+.av:hover{transform:translateY(-2px)}
+.av .face{transition:border-color .3s ease}
+.av.fresh .face{animation:pop .5s cubic-bezier(.3,1.4,.5,1)}
+.sc.fresh{animation:pop .5s cubic-bezier(.3,1.4,.5,1)}
+.hintbox{animation:fade .4s ease}
+#fb{transition:opacity .3s ease}
+.cbar{height:4px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:12px}
+.cbar i{display:block;height:100%;width:100%;background:var(--amber);border-radius:4px;transition:width 1s linear}
+#toast{animation:up .3s ease}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
@@ -112,6 +128,7 @@ input:focus,button:focus-visible{outline:2px solid var(--amber);outline-offset:1
     <div class="qn" id="qn"></div>
     <div id="qtext"></div>
     <div id="qinfo"></div>
+    <div class="cbar hide" id="cbar"><i id="cb"></i></div>
   </div>
 
   <div class="avs" id="avs"></div>
@@ -256,6 +273,8 @@ let isHost=false, wasIn=false, rejoin=false;
 let seen={}, offSince={}, closeAt=0, nextAt=0, lastStateAt=0, dirty=false, tickN=0, joinAt=0, hiddenAt=0;
 const rooms={};
 const chat=[];
+let pendingSolve=0, lastQn=0;
+const lastSc={}, freshKeys=new Set();
 
 /* ============ networking: lobby ============ */
 let lobby=null, sendRooms=null, lobPeers=new Set();
@@ -340,7 +359,7 @@ function handleAct(d,peer){
     case 'leave': removeP(pid); break;
     case 'solve':
       if(p&&S.st==='play'&&!S.solved[pid]&&!S.gave[pid]){
-        S.solved[pid]=1; p.s++; if(!closeAt) closeAt=now+60000; dirty=true }
+        S.solved[pid]=1; p.s++; if(!closeAt) closeAt=now+12000; dirty=true }
       break;
     case 'giveup':
       if(p&&S.st==='play'&&!S.solved[pid]&&!S.gave[pid]){ S.gave[pid]=1; dirty=true } break;
@@ -372,6 +391,11 @@ function handleState(d){
   closeAt = d.cl ? lastStateAt+d.cl : 0;
   nextAt  = d.nx ? lastStateAt+d.nx : 0;
   if(prev && prev.qn!==S.qn){ $('fb').textContent=''; $('fb').className=''; $('ans').value='' }
+  if(pendingSolve){
+    if(pendingSolve!==S.qn || S.st!=='play') pendingSolve=0;
+    else if(d.solved && d.solved[me]) pendingSolve=0;
+    else S.solved[me]=1;
+  }
   if(prev && !isHost){
     for(const p of S.ord) if(!prev.ord.includes(p)) sys(p+' joined');
     for(const p of prev.ord) if(!S.ord.includes(p)) sys(p+' left');
@@ -443,6 +467,7 @@ function render(){
   const now=Date.now(), P=S.P, myP=P[me]; if(!myP) return;
   $('qn').textContent='Question '+S.qn;
   $('qtext').textContent=S.q.t;
+  if(S.qn!==lastQn){ lastQn=S.qn; const qb=document.querySelector('.qbox'); qb.classList.remove('enter'); void qb.offsetWidth; qb.classList.add('enter') }
   const qi=$('qinfo'); qi.className=''; 
   if(S.st==='reveal'){
     qi.className='reveal';
@@ -451,15 +476,24 @@ function render(){
     qi.textContent='Someone solved it. Closing in '+Math.max(0,Math.ceil((closeAt-now)/1000))+'s';
   } else qi.textContent='';
 
+  const cbar=$('cbar'), cb=$('cb'); let left=0, total=1;
+  if(S.st==='reveal'&&nextAt){ left=nextAt-now; total=5000 }
+  else if(closeAt){ left=closeAt-now; total=12000 }
+  if(left>0){ cbar.classList.remove('hide'); cb.style.width=Math.min(100,left/total*100)+'%' }
+  else cbar.classList.add('hide');
+
   const av=$('avs'); av.textContent='';
   for(const pid of S.ord){
     const p=P[pid]; if(!p) continue;
     const d=el('div','av'+(p.o?' off':'')+(S.solved[pid]?' solved':'')+(S.gave[pid]?' gave':''));
+    const fk=S.qn+':'+pid; if(S.solved[pid]&&!freshKeys.has(fk)){ freshKeys.add(fk); d.classList.add('fresh') }
     const f=el('div','face',EMO[hash(pid)%EMO.length]); f.style.background='hsl('+(hash(pid)%360)+',55%,42%)';
     if(S.solved[pid]) f.appendChild(el('span','badge','✅')); else if(S.gave[pid]) f.appendChild(el('span','badge','🏳️'));
     d.appendChild(f);
     d.appendChild(el('div','pid',pid+(pid===me?' (you)':'')));
-    d.appendChild(el('div','sc','✔ '+p.s));
+    const sc=el('div','sc','✔ '+p.s);
+    if(lastSc[pid]!==undefined && p.s>lastSc[pid]) sc.classList.add('fresh');
+    lastSc[pid]=p.s; d.appendChild(sc);
     const st=el('div','st'); st.appendChild(el('span','dot')); st.appendChild(document.createTextNode(p.o?'Offline':'Online'));
     d.appendChild(st); av.appendChild(d);
   }
@@ -503,7 +537,7 @@ $('rcode').onclick=()=>{ try{ navigator.clipboard.writeText(G.code); toast('Room
 function submit(){
   if(!S||S.st!=='play'||S.solved[me]||S.gave[me]) return;
   const v=$('ans').value; if(!v.trim()) return;
-  if(check(S.q,v)){ S.solved[me]=1; $('fb').textContent='✅ Correct!'; $('fb').className='ok'; $('ans').value=''; act('solve'); render() }
+  if(check(S.q,v)){ S.solved[me]=1; pendingSolve=S.qn; $('fb').textContent='✅ Correct!'; $('fb').className='ok'; $('ans').value=''; act('solve'); render() }
   else { $('fb').textContent='❌ Not quite. Try again.'; $('fb').className='bad';
     const i=$('ans'); i.classList.remove('shake'); void i.offsetWidth; i.classList.add('shake') }
 }
@@ -571,6 +605,7 @@ setInterval(()=>{
     try{ sendAct({t:'join',pid:me,rj:rejoin}) }catch{}
     if(Date.now()-joinAt>14000){ toast('Could not reach that room. It may be closed.'); leaveGame(true) }
   }
+  if(!isHost&&pendingSolve&&sendAct) try{ sendAct({t:'solve',pid:me}) }catch{}
   if(!isHost&&wasIn&&tickN%4===0&&!document.hidden&&sendAct) try{ sendAct({t:'ping',pid:me}) }catch{}
   render();
 },1000);
