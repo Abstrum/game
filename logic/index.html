@@ -282,10 +282,33 @@ let saved=null; try{ saved=JSON.parse(sessionStorage.getItem('la_sess')||'null')
 const me = (saved&&saved.pid) || genId();
 $('meid').textContent = me;
 
-const CFG = { appId:'logic-arena-v1-q7m2', relayRedundancy:4 };  // use more trackers so peers find each other faster
-let joinRoom=null;
-try{ ({joinRoom} = await import('https://esm.sh/trystero@0.20.0/torrent')); }
+// Peer discovery goes through public Nostr relays (the old WebTorrent trackers are mostly dead).
+// STUN/TURN servers let phones on different networks / mobile data actually connect to each other.
+const CFG = {
+  appId:'logic-arena-v1-q7m2',
+  relayUrls:[
+    'wss://relay.damus.io','wss://nos.lol','wss://relay.primal.net',
+    'wss://offchain.pub','wss://relay.nostr.band','wss://nostr.mom'
+  ],
+  relayRedundancy:5,
+  rtcConfig:{ iceServers:[
+    {urls:'stun:stun.l.google.com:19302'},
+    {urls:'stun:stun1.l.google.com:19302'},
+    {urls:'stun:stun.cloudflare.com:3478'},
+    {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turns:openrelay.metered.ca:443?transport=tcp'],
+     username:'openrelayproject',credential:'openrelayproject'}
+  ]}
+};
+let joinRoom=null, relaySockets=null;
+try{ ({joinRoom,getRelaySockets:relaySockets} = await import('https://esm.sh/trystero@0.20.0/nostr')); }
 catch(e){ $('neterr').textContent='Could not load the network library. Check your internet connection and reload.'; }
+function netStatus(){
+  if(!joinRoom||!relaySockets) return;
+  try{
+    const s=Object.values(relaySockets()), ok=s.filter(x=>x.readyState===1).length;
+    $('neterr').textContent = ok ? 'Connected to '+ok+' of '+s.length+' relays.' : 'Cannot reach any relay yet. Check your internet, or try another network.';
+  }catch{}
+}
 
 let G=null;          // {code}
 let S=null;          // shared room state
@@ -652,7 +675,7 @@ window.addEventListener('online',()=>{ connectLobby(); if(G) connectGame(G.code)
 
 setInterval(()=>{
   tickN++;
-  if(!G){ if(joinRoom&&!lobPeers.size&&Date.now()-lobbyAt>12000) connectLobby(); renderLobby(); return }
+  if(!G){ if(joinRoom&&!lobPeers.size&&Date.now()-lobbyAt>12000) connectLobby(); if(tickN%3===0) netStatus(); renderLobby(); return }
   if(isHost&&S) hostTick(); else clientTick();
   if(!isHost&&!wasIn&&sendAct){
     try{ sendAct({t:'join',pid:me,rj:rejoin}) }catch{}
