@@ -86,6 +86,8 @@ button:hover:not(:disabled){filter:brightness(1.12)}
 .cbar{height:4px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:12px}
 .cbar i{display:block;height:100%;width:100%;background:var(--amber);border-radius:4px;transition:width 1s linear}
 #toast{animation:up .3s ease}
+select{font:inherit;color:var(--tx);background:#171a33;border:1px solid var(--line);border-radius:12px;padding:10px 12px;width:100%;min-width:0}
+select:focus{outline:2px solid var(--amber);outline-offset:1px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -114,13 +116,30 @@ button:hover:not(:disabled){filter:brightness(1.12)}
     <button class="primary" id="create" style="width:100%">Create room</button>
     <div class="sub" style="margin-top:8px">Share your room code with friends, or let them pick it from Live rooms.</div>
   </div>
+  <div class="box">
+    <div class="lab">Solo mode</div>
+    <div class="row">
+      <select id="soloT" aria-label="Time per question">
+        <option value="0">No timer</option>
+        <option value="10">10 sec per question</option>
+        <option value="15">15 sec per question</option>
+        <option value="20">20 sec per question</option>
+        <option value="30" selected>30 sec per question</option>
+        <option value="45">45 sec per question</option>
+        <option value="60">60 sec per question</option>
+        <option value="90">90 sec per question</option>
+      </select>
+      <button class="primary" id="soloGo" style="white-space:nowrap">Start solo</button>
+    </div>
+    <div class="sub" style="margin-top:8px">Play alone, no connection needed. If the timer runs out, the answer is shown and the next question comes.</div>
+  </div>
   <div class="sub" id="neterr"></div>
 </div>
 
 <!-- GAME -->
 <div id="game" class="wrap hide">
   <div class="top">
-    <div>Room <span class="code" id="rcode" title="Tap to copy"></span></div>
+    <div><span id="rlab">Room</span> <span class="code" id="rcode" title="Tap to copy"></span></div>
     <button class="danger" id="leave">Leave</button>
   </div>
 
@@ -132,8 +151,9 @@ button:hover:not(:disabled){filter:brightness(1.12)}
   </div>
 
   <div class="avs" id="avs"></div>
+  <button class="primary hide" id="start" style="width:100%"></button>
 
-  <div class="box ans">
+  <div class="box ans" id="ansbox">
     <div class="row">
       <input id="ans" placeholder="Type your answer" autocomplete="off" autocapitalize="off">
       <button class="primary" id="submit">Submit</button>
@@ -158,7 +178,7 @@ button:hover:not(:disabled){filter:brightness(1.12)}
     <div class="sub" style="margin-top:6px">Switch to Scroll to move around the sheet. It grows as you draw near the edge.</div>
   </div>
 
-  <div class="box">
+  <div class="box" id="chatbox">
     <div class="lab">Chat</div>
     <div id="chatlog"></div>
     <div class="row">
@@ -262,7 +282,7 @@ let saved=null; try{ saved=JSON.parse(sessionStorage.getItem('la_sess')||'null')
 const me = (saved&&saved.pid) || genId();
 $('meid').textContent = me;
 
-const CFG = { appId:'logic-arena-v1-q7m2' };
+const CFG = { appId:'logic-arena-v1-q7m2', relayRedundancy:4 };  // use more trackers so peers find each other faster
 let joinRoom=null;
 try{ ({joinRoom} = await import('https://esm.sh/trystero@0.20.0/torrent')); }
 catch(e){ $('neterr').textContent='Could not load the network library. Check your internet connection and reload.'; }
@@ -270,18 +290,18 @@ catch(e){ $('neterr').textContent='Could not load the network library. Check you
 let G=null;          // {code}
 let S=null;          // shared room state
 let isHost=false, wasIn=false, rejoin=false;
-let seen={}, offSince={}, closeAt=0, nextAt=0, lastStateAt=0, dirty=false, tickN=0, joinAt=0, hiddenAt=0;
+let seen={}, offSince={}, closeAt=0, nextAt=0, qEnd=0, lastStateAt=0, dirty=false, tickN=0, joinAt=0, hiddenAt=0;
 const rooms={};
 const chat=[];
 let pendingSolve=0, lastQn=0;
 const lastSc={}, freshKeys=new Set();
 
 /* ============ networking: lobby ============ */
-let lobby=null, sendRooms=null, lobPeers=new Set();
+let lobby=null, sendRooms=null, lobPeers=new Set(), lobbyAt=0;
 function connectLobby(){
   if(!joinRoom) return;
   try{ lobby&&lobby.leave() }catch{}
-  lobPeers=new Set();
+  lobPeers=new Set(); lobbyAt=Date.now();
   lobby=joinRoom(CFG,'lobby');
   const [s,g]=lobby.makeAction('rooms'); sendRooms=s;
   g(d=>{ if(d&&typeof d.code==='string') rooms[d.code.slice(0,8)]={code:d.code.slice(0,8),n:+d.n||1,q:+d.q||0,seen:Date.now()} });
@@ -289,13 +309,13 @@ function connectLobby(){
   lobby.onPeerLeave(p=>lobPeers.delete(p));
 }
 function announce(to){
-  if(isHost&&S&&sendRooms) try{ sendRooms({code:S.code,n:S.ord.filter(p=>!S.P[p].o).length,q:S.qn},to) }catch{}
+  if(isHost&&S&&!S.solo&&sendRooms) try{ sendRooms({code:S.code,n:S.ord.filter(p=>!S.P[p].o).length,q:S.qn},to) }catch{}
 }
 
 /* ============ networking: game room ============ */
 let gr=null, sendState=null, sendAct=null, sendChat=null;
 function connectGame(code){
-  if(!joinRoom) return;
+  if(!joinRoom||(S&&S.solo)) return;
   try{ gr&&gr.leave() }catch{}
   gr=joinRoom(CFG,'g-'+code);
   let a;
@@ -315,10 +335,12 @@ function bc(){ if(sendState) try{ sendState(snap()) }catch{} }
 function newQ(){
   const g=pick(gens)();
   S.qn++; S.q={t:g.t,a:g.a,al:g.al||[],h:g.h}; S.solved={}; S.gave={}; S.st='play'; S.why=''; closeAt=0; dirty=true;
+  qEnd = S.tl ? Date.now()+S.tl*1000 : 0;
+  $('fb').textContent=''; $('fb').className=''; $('ans').value='';
 }
-function reveal(){
-  S.why = Object.keys(S.solved).length ? '' : 'Everyone gave up.';
-  S.st='reveal'; nextAt=Date.now()+5000; closeAt=0; dirty=true;
+function reveal(timedOut){
+  S.why = Object.keys(S.solved).length ? '' : (timedOut ? "Time's up." : (S.solo ? 'You gave up.' : 'Everyone gave up.'));
+  S.st='reveal'; nextAt=Date.now()+5000; closeAt=0; qEnd=0; dirty=true;
 }
 function removeP(pid){
   if(!S.P[pid]) return;
@@ -330,14 +352,18 @@ function hostTick(){
   for(const pid of S.ord.slice()){
     if(pid===me) continue;
     const p=S.P[pid]; if(!p) continue;
-    if(!p.o && now-(seen[pid]||0)>15000){ p.o=1; offSince[pid]=now; dirty=true }
+    if(!p.o && now-(seen[pid]||0)>30000){ p.o=1; offSince[pid]=now; dirty=true }
     if(p.o && now-(offSince[pid]||now)>60000) removeP(pid);
   }
   if(S.st==='play'){
     const act=S.ord.filter(p=>!S.P[p].o);
-    if(act.length && act.every(p=>S.solved[p]||S.gave[p])) reveal();
+    const everyone=S.ord.every(p=>S.solved[p]||S.gave[p]);
+    // Once someone has solved, only end early when EVERY player is done;
+    // otherwise wait out the 12s window so slow/backgrounded players can still score.
+    if(everyone || (!closeAt && act.length && act.every(p=>S.solved[p]||S.gave[p]))) reveal();
     else if(closeAt && now>=closeAt) reveal();
-  } else if(now>=nextAt) newQ();
+    else if(qEnd && now>=qEnd) reveal(true);
+  } else if(S.st==='reveal' && now>=nextAt) newQ();
   if(dirty||tickN%3===0){ bc(); dirty=false }
   if(tickN%3===0) announce();
 }
@@ -415,7 +441,8 @@ function clientTick(){
 /* ============ lobby / room flow ============ */
 function persist(){ try{ sessionStorage.setItem('la_sess',JSON.stringify({pid:me,code:G.code})) }catch{} }
 function showLobby(){ $('game').classList.add('hide'); $('lobby').classList.remove('hide'); renderLobby() }
-function showGame(){ $('lobby').classList.add('hide'); $('game').classList.remove('hide'); $('rcode').textContent=G.code; setTimeout(()=>initSheet(),0) }
+function showGame(){ $('lobby').classList.add('hide'); $('game').classList.remove('hide');
+  const so=!!(S&&S.solo); $('rlab').textContent=so?'Solo ·':'Room'; $('rcode').textContent=so?(S.tl?S.tl+'s per question':'no timer'):G.code; setTimeout(()=>initSheet(),0) }
 function setOv(t){ $('ovt').textContent=t; $('ov').classList.remove('hide') }
 function clearOv(){ $('ov').classList.add('hide') }
 
@@ -423,9 +450,22 @@ function createRoom(){
   if(!joinRoom) return toast('Network not available.');
   const code=genId();
   G={code}; isHost=true; wasIn=true; rejoin=false;
-  S={code,ep:1,host:me,qn:0,P:{[me]:{s:0,o:0,h:-9}},ord:[me],st:'play',q:null,solved:{},gave:{},why:''};
-  seen={[me]:Date.now()}; offSince={};
-  newQ(); chat.length=0; connectGame(code); persist(); showGame(); render(); sys('Room created. Share the code '+code);
+  S={code,solo:false,tl:0,ep:1,host:me,qn:0,P:{[me]:{s:0,o:0,h:-9}},ord:[me],st:'wait',q:{t:'',a:'',al:[],h:''},solved:{},gave:{},why:''};
+  seen={[me]:Date.now()}; offSince={}; qEnd=0;
+  chat.length=0; connectGame(code); persist(); showGame(); render(); sys('Room created. Share the code '+code);
+}
+function startGame(){
+  if(!isHost||!S||S.st!=='wait') return;
+  if(S.ord.filter(p=>!S.P[p].o).length<2) return toast('Wait for another player to join.');
+  newQ(); bc(); render();
+}
+function startSolo(){
+  const tl=+$('soloT').value||0;
+  try{ localStorage.setItem('la_solo_t',String(tl)) }catch{}
+  G={code:'SOLO'}; isHost=true; wasIn=true; rejoin=false; sendState=sendAct=sendChat=null;
+  S={code:'SOLO',solo:true,tl,ep:1,host:me,qn:0,P:{[me]:{s:0,o:0,h:-9}},ord:[me],st:'play',q:null,solved:{},gave:{},why:''};
+  seen={[me]:Date.now()}; offSince={}; chat.length=0;
+  newQ(); showGame(); render();
 }
 function joinGame(code,rj){
   if(!joinRoom) return toast('Network not available.');
@@ -442,7 +482,7 @@ function leaveGame(silent){
     } else if(sendAct) try{ sendAct({t:'leave',pid:me}) }catch{}
   }
   const g=gr; setTimeout(()=>{ try{ g&&g.leave() }catch{} },400);
-  gr=null; G=null; S=null; isHost=false; wasIn=false; closeAt=nextAt=0;
+  gr=null; G=null; S=null; isHost=false; wasIn=false; closeAt=nextAt=qEnd=0; pendingSolve=0;
   try{ sessionStorage.removeItem('la_sess') }catch{}
   clearOv(); showLobby();
 }
@@ -457,7 +497,7 @@ function renderLobby(){
   for(const r of list){
     const row=el('div','room'), l=el('div');
     l.appendChild(el('b',null,r.code));
-    l.appendChild(el('div','sub',r.n+(r.n===1?' player':' players')+' · question '+r.q));
+    l.appendChild(el('div','sub',r.n+(r.n===1?' player':' players')+(r.q?' · question '+r.q:' · waiting to start')));
     const b=el('button','primary','Join'); b.onclick=()=>joinGame(r.code,false);
     row.append(l,b); box.appendChild(row);
   }
@@ -474,11 +514,20 @@ function render(){
     qi.textContent=(S.why?S.why+' ':'')+'Answer: '+S.q.a+'  ·  next in '+Math.max(0,Math.ceil((nextAt-now)/1000))+'s';
   } else if(closeAt){
     qi.textContent='Someone solved it. Closing in '+Math.max(0,Math.ceil((closeAt-now)/1000))+'s';
+  } else if(S.solo&&S.tl&&qEnd&&S.st==='play'){
+    qi.textContent='Time left: '+Math.max(0,Math.ceil((qEnd-now)/1000))+'s';
   } else qi.textContent='';
 
+  if(S.st==='wait'){
+    const n=S.ord.filter(p=>!P[p].o).length;
+    $('qn').textContent='Waiting room';
+    $('qtext').textContent=isHost?('Share room code '+S.code+' with a friend.'):'Waiting for the host to start the game…';
+    qi.className=''; qi.textContent=isHost?(n<2?'You can start once another player joins.':n+' players are ready.'):n+(n===1?' player is here.':' players are here.');
+  }
   const cbar=$('cbar'), cb=$('cb'); let left=0, total=1;
   if(S.st==='reveal'&&nextAt){ left=nextAt-now; total=5000 }
   else if(closeAt){ left=closeAt-now; total=12000 }
+  else if(S.solo&&S.tl&&qEnd&&S.st==='play'){ left=qEnd-now; total=S.tl*1000 }
   if(left>0){ cbar.classList.remove('hide'); cb.style.width=Math.min(100,left/total*100)+'%' }
   else cbar.classList.add('hide');
 
@@ -499,6 +548,10 @@ function render(){
   }
 
   const play=S.st==='play', done=!!(S.solved[me]||S.gave[me]), can=play&&!done;
+  const onl=S.ord.filter(p=>!P[p].o).length, sb=$('start');
+  sb.classList.toggle('hide',!(isHost&&S.st==='wait'&&!S.solo));
+  sb.disabled=onl<2; sb.textContent=onl<2?'Waiting for another player…':'Start game ('+onl+' players)';
+  $('ansbox').classList.toggle('hide',S.st==='wait'); $('chatbox').classList.toggle('hide',!!S.solo);
   $('ans').disabled=!can; $('submit').disabled=!can; $('giveup').disabled=!can;
   const hb=$('hint'), hbox=$('hintbox');
   if(myP.h===S.qn){ hb.disabled=true; hb.textContent='Hint used'; hbox.textContent='Hint: '+S.q.h; hbox.classList.remove('hide') }
@@ -528,16 +581,16 @@ function handleChat(d){
 }
 
 /* ============ UI wiring ============ */
-$('create').onclick=createRoom;
+$('create').onclick=createRoom; $('start').onclick=startGame; $('soloGo').onclick=startSolo;
 $('joinCode').onclick=()=>joinGame($('codeIn').value,false);
 $('codeIn').addEventListener('keydown',e=>{ if(e.key==='Enter') joinGame($('codeIn').value,false) });
 $('leave').onclick=()=>{ if(confirm('Leave this room? Your score will be lost.')) leaveGame(false) };
-$('rcode').onclick=()=>{ try{ navigator.clipboard.writeText(G.code); toast('Room code copied') }catch{} };
+$('rcode').onclick=()=>{ if(S&&S.solo) return; try{ navigator.clipboard.writeText(G.code); toast('Room code copied') }catch{} };
 
 function submit(){
   if(!S||S.st!=='play'||S.solved[me]||S.gave[me]) return;
   const v=$('ans').value; if(!v.trim()) return;
-  if(check(S.q,v)){ S.solved[me]=1; pendingSolve=S.qn; $('fb').textContent='✅ Correct!'; $('fb').className='ok'; $('ans').value=''; act('solve'); render() }
+  if(check(S.q,v)){ if(!isHost){ S.solved[me]=1; pendingSolve=S.qn } $('fb').textContent='✅ Correct!'; $('fb').className='ok'; $('ans').value=''; act('solve'); render() }
   else { $('fb').textContent='❌ Not quite. Try again.'; $('fb').className='bad';
     const i=$('ans'); i.classList.remove('shake'); void i.offsetWidth; i.classList.add('shake') }
 }
@@ -599,7 +652,7 @@ window.addEventListener('online',()=>{ connectLobby(); if(G) connectGame(G.code)
 
 setInterval(()=>{
   tickN++;
-  if(!G){ renderLobby(); return }
+  if(!G){ if(joinRoom&&!lobPeers.size&&Date.now()-lobbyAt>12000) connectLobby(); renderLobby(); return }
   if(isHost&&S) hostTick(); else clientTick();
   if(!isHost&&!wasIn&&sendAct){
     try{ sendAct({t:'join',pid:me,rj:rejoin}) }catch{}
@@ -611,6 +664,7 @@ setInterval(()=>{
 },1000);
 
 /* ============ boot ============ */
+try{ const t=localStorage.getItem('la_solo_t'); if(t!==null&&[...$('soloT').options].some(o=>o.value===t)) $('soloT').value=t }catch{}
 connectLobby(); renderLobby();
 if(saved&&saved.code) joinGame(saved.code,true);
 </script>
